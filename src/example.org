@@ -1,0 +1,25 @@
+* Example Music Playlist
+
+** Glenn Miller
+
+- [[https://www.youtube.com/watch?v=_CI-0E_jses][In the Mood]]
+- [[https://www.youtube.com/watch?v=EAVejLjXVdw][American Patrol]]
+- [[https://www.youtube.com/watch?v=DhDaOdGZbF4][On A Little Street in Singapore]]
+- [[https://www.youtube.com/watch?v=MPF38fYkBjc][Moonlight Cocktail]]
+- [[https://www.youtube.com/watch?v=K3AGWCjeSDw][Back To Back]]
+
+** Vivaldi
+
+*** 4 Seasons
+
++ [[https://www.youtube.com/watch?v=GRxofEmo3HA][\
+    {\
+        "title": "lambda line: line.split(' => ')[1][:-2]",\
+        "time": "lambda line: line.split(' => ')[0].strip()"\
+    };\
+    00:00 => Spring\
+    10:31 => Summer\
+    20:59 => Autumn\
+    32:48 => Winter\
+    41:59 => END\
+  ]]

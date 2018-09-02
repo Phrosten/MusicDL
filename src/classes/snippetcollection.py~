@@ -1,0 +1,6 @@
+class SnippetCollection:
+    def __init__(self, snippet=None):
+        if snippet == None:
+            self.snippets = []
+        else:
+            self.snippets = [snippet, ]

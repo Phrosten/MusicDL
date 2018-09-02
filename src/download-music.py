@@ -13,8 +13,8 @@ from classes.snippet import Snippet
 from classes.snippetcollection import SnippetCollection
 
 # TODO: Write documentation and comments
-# TODO: Make sure download_playlist reads and writes _content.json properly
-# TOOD: Normalize the sound
+# TODO: Include META tags
+# TODO: Update the README
 
 CURR_DIR = os.path.dirname(os.path.realpath(__file__)) + "/"
 SCRIPT_DIR = CURR_DIR + "scripts/"
@@ -97,7 +97,8 @@ async def run_script(command):
         stderr=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL
     )
-    await process.communicate()
+    stdout, stderr = await process.communicate()
+    return (stdout, stderr)
 
 #
 # Download

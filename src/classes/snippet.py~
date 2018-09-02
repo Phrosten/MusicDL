@@ -1,0 +1,7 @@
+class Snippet:
+    def __init__(self, title, start_time):
+        self.TITLE = title
+
+        # Convert
+        if ":" in start_time
+        self.START_TIME = start_time

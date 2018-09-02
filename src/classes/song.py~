@@ -1,0 +1,13 @@
+#!/usr/bin/python3
+
+
+class Song:
+    def __init__(self, title, url, snippet=False, start_time=None):
+        if snippet and start_time == None:
+            raise ValueError(
+                "If the song is a snippet it must include a start_time.")
+
+        self.title = lambda: title
+        self.url = lambda: url
+        self.snippet = lambda: snippet
+        self.start_time = lambda: start_time
