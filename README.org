@@ -1,0 +1,30 @@
+* MusicDL
+
+This repository contains a *quick* and *dirty* python script that downloads
+YouTube videos as .mp3 files to the hard drive.
+
+Be cautious! The script is for my *personal use only*, I have *not tested* it
+extensibly nor do I intend to develop it continually.
+
+** Use
+
+In order to download .mp3 files you have to provide an index file (which should
+be written in emacs, since the index file's format is basically org mode).
+
+Inside this file, you can structure playlists and provide links to the videos,
+as well as titles. An example .org file can be found in /src.
+
+The script will then download all videos as mp3 files to the directory
+/music/<Playlist>/SongTitle.mp3, where /music is on the same level as the script.
+
+#+BEGIN_SRC bash
+./download-music.py example.org
+#+END_SRC
+
+Be careful with downloading very large playlists, as the script creates
+background processes that can quickly max out your system resources.
+
+** Platforms
+
+I have only tested this script under Linux, altough it should work on other
+Operating Systems.
