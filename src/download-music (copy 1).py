@@ -17,28 +17,16 @@ from classes.snippetcollection import SnippetCollection
 # TODO: Include META tags
 # TODO: Update the README
 
-# TODO: Delete temporary file for snippetcollection
-
 CURR_DIR = os.path.dirname(os.path.realpath(__file__)) + "/"
 SCRIPT_DIR = CURR_DIR + "scripts/"
+NUM_OF_WORKERS = 4
 
-#
-# Constants
-#
-
-NUMBER_OF_NORMALISATION_WORKERS = 4
-NUMBER_OF_SPLITTING_WORKERS = 4
-
-#
-# Helper
-#
-
-def norm_title(title):
-    return title.replace("/", "").replace('"', "'")
+NUMBER_OF_DOWNLOAD_WORKERS = 20
 
 #
 # _contents.json interaction
 #
+
 
 def load_downloaded_urls(destination):
     urls = []
@@ -65,6 +53,7 @@ def save_downloaded_urls(destination, urls):
 #
 # Scripts
 #
+
 
 def get_download_script(output_file, url):
     return (
@@ -104,20 +93,6 @@ def get_split_script(input_file, start_time, end_time, output_file):
         '"{}"'.format(output_file)
     )
 
-#
-# Execution
-#
-
-async def async_run_script(command):
-    process = await asyncio.create_subprocess_shell(
-        command,
-        shell=True,
-        stderr=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL
-    )
-    stdout, stderr = await process.communicate()
-    return (stdout, stderr)
-
 def run_script(command):
     process = subprocess.Popen(
         command,
@@ -131,16 +106,19 @@ def run_script(command):
 # Download
 #
 
-async def download_song(song, destination):
+def download_song(song, destination):
     """Downloads the song to the given destination and normalizes it."""
-    await async_run_script(
+    run_script(
         get_download_script(
-            destination + norm_title(song.TITLE),
+            destination + song.TITLE.replace("/", "").replace('"', "'"),
             song.URL
-        )
+        ),
     )
-    normalisation_queue.put(
-        destination + norm_title(song.TITLE)
+
+    run_script(
+        get_normalisation_script(
+            destination + song.TITLE.replace("/", "").replace('"', "'"),
+        ),
     )
 
 
@@ -150,7 +128,7 @@ async def download_snippet_collection(snippet_collection, destination):
     for i in range(0, 16):
         temp_title += chr(randint(ord('a'), ord('z')))
 
-    await async_run_script(
+    await run_script(
         get_download_script(
             destination + temp_title,
             snippet_collection.URL
@@ -158,18 +136,34 @@ async def download_snippet_collection(snippet_collection, destination):
     )
 
     temp_title += "_tmp.mp3"
-    for index in range(0, len(snippet_collection.snippets) - 1):
-        snippet_title = norm_title(snippet_collection.snippets[index].TITLE)
 
-        splitting_queue.put((
-            (
+    tasks = []
+    for index in range(0, len(snippet_collection.snippets) - 1):
+        snippet_title = (snippet_collection.snippets[index].TITLE).replace(
+            "/", "").replace('"', "'")
+
+        print("\t\tSplitting {}..".format(
+            snippet_collection.snippets[index].TITLE))
+
+        tasks.append(run_script(
+            get_split_script(
                 destination + temp_title,
                 snippet_collection.snippets[index].START_TIME,
                 snippet_collection.snippets[index + 1].START_TIME,
                 destination + snippet_title + "_tmp.mp3"
-            ),
-            destination + norm_title(snippet_title)
+            ) + " && " +
+            get_normalisation_script(
+                destination +
+                snippet_collection.snippets[index].TITLE.replace(
+                    "/", "").replace('"', "'")
+            )
         ))
+    await asyncio.gather(*tasks)
+
+    print("\tDeleting temporary file.")
+    await run_script(
+        "rm " + destination + temp_title
+    )
 
 
 async def download_playlist(playlist, destination):
@@ -189,42 +183,11 @@ async def download_playlist(playlist, destination):
     save_downloaded_urls(destination, downloaded_urls)
 
 
-async def download_playlists(playlists, destination):
-    for playlist in playlists:
-        print("* Downloading Playlist '" + playlist + "'.. ")
-        await download_playlist(playlists[playlist],
-                                destination + "/" + playlist + "/")
-
-#
-# Normalisation
-#
-
-normalisation_queue = Queue()
-def normalisation_worker(queue):
-    # Seperate Process
-    while True:
-        message = queue.get()
-
-        if (message == 'shutdown'):
-            break
-        else:
-            run_script(get_normalisation_script(message))
-
-#
-# Splitting
-#
-
-splitting_queue = Queue()
-def splitting_worker(queue):
-    # Seperate Process
-    while True:
-        message = queue.get()
-
-        if (message == 'shutdown'):
-            break
-        else:
-            run_script(get_split_script(*message[0]))
-            normalisation_queue.put(message[1])
+#async def download_playlists(playlists, destination):
+#    for playlist in playlists:
+#        print("* Downloading Playlist '" + playlist + "'.. ")
+#        await download_playlist(playlists[playlist],
+#                                destination + "/" + playlist + "/")
 
 #
 # Parsing
@@ -290,24 +253,65 @@ def parse_music(music_content):
     return playlists
 
 #
+# Planning
+#
+
+def get_download_playlist_tasks(playlist, destination):
+    downloaded_urls = []#load_downloaded_urls(destination)
+
+    # Download every item that is not already downloaded
+    tasks = []
+    for item in playlist:
+        if item.URL not in downloaded_urls:
+            if isinstance(item, Song):
+                tasks.append({
+                    "item": item,
+                    "destination": destination
+                })
+            downloaded_urls.append(item.URL)
+
+    return tasks
+    save_downloaded_urls(destination, downloaded_urls)
+
+#
 # Execution
 #
 
-def start_workers(worker, queue, n):
+download_queue = Queue()
+def download_worker(queue):
+    # Seperate Process
+    while True:
+        message = queue.get()
+
+        if (message == 'shutdown'):
+            break
+        else:
+            download_song(message["item"], message["destination"])
+
+async def download_songs(playlists, directory):
+    # Create Workers
     workers = []
-    for _ in range(0, n):
-        pworker = Process(target=worker, args=(queue,))
+    for _ in range(0, NUMBER_OF_DOWNLOAD_WORKERS):
+        pworker = Process(target=download_worker, args=(download_queue,))
         pworker.daemon = True
         pworker.start()
         workers.append(pworker)
-    return workers
 
-def stop_workers(workers, queue):
-    for i in range(0, len(workers)):
-        queue.put('shutdown')
+    # Add items to the queue
+    for playlist in playlists:
+        print("* Adding Playlist '" + playlist + "' To Queue. ")
+        messages = get_download_playlist_tasks(playlists[playlist],
+                                               directory + "/" + playlist + "/")
+        for message in messages:
+            download_queue.put(message)
 
-    for i in range(0, len(workers)):
-        workers[i].join()
+    # Shutdown workers
+    for _ in range(0, NUMBER_OF_DOWNLOAD_WORKERS):
+        download_queue.put('shutdown')
+
+    for worker in workers:
+        worker.join()
+
 
 async def main():
     if len(sys.argv) == 2:
@@ -319,10 +323,7 @@ async def main():
     with open(f) as content:
         playlists = parse_music("".join(content.readlines()))
 
-    #
     # Print playlist information
-    #
-
     print("Found {} playlist(s) with {} song(s).".format(
         len(playlists),
         # Count all the songs
@@ -332,31 +333,10 @@ async def main():
              if isinstance(s, SnippetCollection)])
     ))
 
-    #
-    # Actually do the work
-    #
-
     if not os.path.exists(CURR_DIR + "music"):
         os.mkdir(CURR_DIR + "music")
 
-    # Be mindful of the order in which the workers are stopped, since they can
-    # feed one another.
-    splitting_workers = start_workers(
-        splitting_worker,
-        splitting_queue,
-        NUMBER_OF_SPLITTING_WORKERS
-    )
-    normalisation_workers = start_workers(
-        normalisation_worker,
-        normalisation_queue,
-        NUMBER_OF_NORMALISATION_WORKERS
-    )
-
-    await download_playlists(playlists, CURR_DIR + "music")
-
-    stop_workers(splitting_workers, splitting_queue)
-    stop_workers(normalisation_workers, normalisation_queue)
-
+    await download_songs(playlists, CURR_DIR + "music")
     print("Done.")
 
 
