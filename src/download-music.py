@@ -19,9 +19,6 @@ from classes.snippetcollection import SnippetCollection
 
 # TODO: Delete temporary file for snippetcollection
 
-CURR_DIR = os.path.dirname(os.path.realpath(__file__)) + "/"
-SCRIPT_DIR = CURR_DIR + "scripts/"
-
 #
 # Constants
 #
@@ -29,12 +26,24 @@ SCRIPT_DIR = CURR_DIR + "scripts/"
 NUMBER_OF_NORMALISATION_WORKERS = 4
 NUMBER_OF_SPLITTING_WORKERS = 4
 
+CURR_DIR = os.path.dirname(os.path.realpath(__file__)) + "/"
+SCRIPT_DIR = CURR_DIR + "scripts/"
+
+#
+# Global variables
+#
+
+to_delete = []
+normalisation_queue = Queue()
+splitting_queue = Queue()
+
 #
 # Helper
 #
 
 def norm_title(title):
-    return title.replace("/", "").replace('"', "'")
+    # Replace slash, quote and colon to make it conform with filesystems
+    return title.replace("/", "").replace('"', "").replace(":", "")
 
 #
 # _contents.json interaction
@@ -104,6 +113,12 @@ def get_split_script(input_file, start_time, end_time, output_file):
         '"{}"'.format(output_file)
     )
 
+def get_delete_script(destination):
+    return (
+        "rm " +
+        '"{}"'.format(destination)
+    )
+
 #
 # Execution
 #
@@ -170,6 +185,7 @@ async def download_snippet_collection(snippet_collection, destination):
             ),
             destination + norm_title(snippet_title)
         ))
+    to_delete.append(destination + temp_title)
 
 
 async def download_playlist(playlist, destination):
@@ -199,7 +215,6 @@ async def download_playlists(playlists, destination):
 # Normalisation
 #
 
-normalisation_queue = Queue()
 def normalisation_worker(queue):
     # Seperate Process
     while True:
@@ -214,7 +229,6 @@ def normalisation_worker(queue):
 # Splitting
 #
 
-splitting_queue = Queue()
 def splitting_worker(queue):
     # Seperate Process
     while True:
@@ -293,6 +307,10 @@ def parse_music(music_content):
 # Execution
 #
 
+def cleanup():
+    for destination in to_delete:
+        run_script(get_delete_script(destination))
+
 def start_workers(worker, queue, n):
     workers = []
     for _ in range(0, n):
@@ -356,6 +374,8 @@ async def main():
 
     stop_workers(splitting_workers, splitting_queue)
     stop_workers(normalisation_workers, normalisation_queue)
+
+    cleanup()
 
     print("Done.")
 
